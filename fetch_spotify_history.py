@@ -9,7 +9,6 @@ load_dotenv()
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
-CSV_FILE = "spotify_history_01.csv"
 
 # Fixed timestamp for the beginning of 2025
 START_OF_2025_TIMESTAMP = int(pd.Timestamp("2025-01-01T00:00:00Z").timestamp() * 1000)
@@ -48,63 +47,69 @@ def get_recently_played_tracks(access_token, after=None, limit=50):
     response.raise_for_status()
     return response.json()
 
-def get_last_played_timestamp(csv_file):
+def get_last_played_timestamp():
     """
-    Reads the CSV file to find the most recent 'played_at' timestamp.
+    Reads the last played timestamp across all monthly files to determine the latest timestamp.
     """
-    try:
-        with open(csv_file, "r", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            rows = list(reader)
-            if rows:
-                # Extract the last row's played_at timestamp
-                return rows[-1][0]
-    except FileNotFoundError:
-        # If the file doesn't exist, return None
-        return None
-    return None
+    latest_timestamp = None
+    for month in range(1, 13):
+        csv_file = f"spotify_history_{month:02d}.csv"
+        try:
+            data = pd.read_csv(csv_file, header=None)
+            data.columns = ["played_at", "track_id", "track_name", "artist_name", "duration_ms"]
+            data = data.sort_values("played_at")
+            last_timestamp = data["played_at"].iloc[-1]
+            if not latest_timestamp or pd.to_datetime(last_timestamp) > pd.to_datetime(latest_timestamp):
+                latest_timestamp = last_timestamp
+        except FileNotFoundError:
+            continue
+    return latest_timestamp
+
+def write_track_to_monthly_file(track_data):
+    """
+    Writes a track to the appropriate monthly CSV file based on its played_at timestamp.
+    """
+    played_at = pd.to_datetime(track_data["played_at"])
+    month = played_at.month
+    csv_file = f"spotify_history_{month:02d}.csv"
+    track_info = [
+        track_data["played_at"],
+        track_data["track"]["id"],
+        track_data["track"]["name"].replace(",", " "),
+        track_data["track"]["artists"][0]["name"].replace(",", " "),
+        track_data["track"]["duration_ms"]
+    ]
+
+    # Append to the monthly file
+    with open(csv_file, "a", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(track_info)
 
 def main():
-    # 1. Get a fresh access token using the refresh token
+    # Get a fresh access token
     access_token = get_access_token(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN)
     
-    # 2. Determine the timestamp to fetch data after
-    last_played_at = get_last_played_timestamp(CSV_FILE)
+    # Determine the timestamp to fetch data after
+    last_played_at = get_last_played_timestamp()
     if last_played_at:
         after_timestamp = int(pd.to_datetime(last_played_at).timestamp() * 1000)
     else:
-        # Start from the beginning of 2025 if the file doesn't exist
         after_timestamp = START_OF_2025_TIMESTAMP
 
     total_new_tracks = 0
 
-    # 3. Continuously fetch data until there are no more tracks
-    while True:
-        recently_played_data = get_recently_played_tracks(access_token, after=after_timestamp, limit=50)
-        items = recently_played_data.get("items", [])
+    #Continuously fetch data
+
+    recently_played_data = get_recently_played_tracks(access_token, after=after_timestamp, limit=50)
+    items = recently_played_data.get("items", [])
         
-        # If no new tracks are returned, break the loop
-        if not items:
-            print("No more new tracks to fetch.")
-            break
+ 
 
-        # Append new tracks to the CSV
-        with open(CSV_FILE, "a", encoding="utf-8", newline="") as f:
-            writer = csv.writer(f)
-            for item in items:
-                track = item["track"]
-                played_at = item["played_at"]
-                track_id = track["id"]
-                track_name = track["name"].replace(",", " ")
-                artist_name = track["artists"][0]["name"].replace(",", " ")
-                duration_ms = track["duration_ms"]
-                writer.writerow([played_at, track_id, track_name, artist_name, duration_ms])
-                total_new_tracks += 1
-
-        # Update the `after_timestamp` to the last fetched track's `played_at`
-        after_timestamp = int(pd.to_datetime(items[-1]["played_at"]).timestamp() * 1000)
-    
-    print(f"Added {total_new_tracks} new tracks to {CSV_FILE}.")
+    for item in items:
+        print("writing trakc: ", item)
+        write_track_to_monthly_file(item)
+        total_new_tracks += 1
+    print(f"Added {total_new_tracks} new tracks across monthly files.")
 
 if __name__ == "__main__":
     main()
