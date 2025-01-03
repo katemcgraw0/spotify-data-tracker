@@ -98,15 +98,19 @@ def main():
 
     total_new_tracks = 0
 
-    #Continuously fetch data
-
+    # Continuously fetch data
     recently_played_data = get_recently_played_tracks(access_token, after=after_timestamp, limit=50)
     items = recently_played_data.get("items", [])
-        
- 
+    
+    if not items:
+        print("No new tracks found.")
+        return
 
-    for item in items:
-        print("writing trakc: ", item)
+    # Reverse the list to process from oldest to newest
+    items_reversed = list(reversed(items))
+
+    for item in items_reversed:
+        print("Writing track:", item["track"]["name"], "played at", item["played_at"])
         write_track_to_monthly_file(item)
         total_new_tracks += 1
     print(f"Added {total_new_tracks} new tracks across monthly files.")
