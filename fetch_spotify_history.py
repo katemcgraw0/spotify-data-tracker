@@ -9,7 +9,7 @@ load_dotenv()
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("SPOTIFY_REFRESH_TOKEN")
-CSV_FILE = "spotify_history.csv"
+CSV_FILE = "spotify_history_01.csv"
 
 # Fixed timestamp for the beginning of 2025
 START_OF_2025_TIMESTAMP = int(pd.Timestamp("2025-01-01T00:00:00Z").timestamp() * 1000)
