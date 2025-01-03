@@ -42,6 +42,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add spotify_history.csv
+          git add spotify_history_01.csv
           git commit -m "Update Spotify data [skip ci]" || echo "No changes to commit"
           git push https://${{ secrets.PAT }}@github.com/katemcgraw0/spotify-data-tracker.git main
