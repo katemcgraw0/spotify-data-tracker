@@ -75,8 +75,8 @@ def write_track_to_monthly_file(track_data):
     track_info = [
         track_data["played_at"],
         track_data["track"]["id"],
-        track_data["track"]["name"].replace(",", " "),
-        track_data["track"]["artists"][0]["name"].replace(",", " "),
+        track_data["track"]["name"].replace(",", " ").replace("\n", " ").replace("\r", " "),
+        track_data["track"]["artists"][0]["name"].replace(",", " ").replace("\n", " ").replace("\r", " "),
         track_data["track"]["duration_ms"]
     ]
 
@@ -84,6 +84,7 @@ def write_track_to_monthly_file(track_data):
     with open(csv_file, "a", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(track_info)
+
 
 def main():
     # Get a fresh access token
