@@ -13,6 +13,216 @@ import math
 import argparse
 import time
 
+def create_monthly_top_artists(history, graphs_dir):
+    """Create a visualization showing top 5 artists for each month."""
+    # Get top 5 artists for each month
+    monthly_top_artists = history.groupby(['month', 'artist'])['minutes_played'].sum().reset_index()
+    monthly_top_artists = monthly_top_artists.sort_values(['month', 'minutes_played'], ascending=[True, False])
+    monthly_top_artists = monthly_top_artists.groupby('month').head(5)
+    
+    # Create a pivot table for easier plotting
+    pivot_data = monthly_top_artists.pivot(index='artist', columns='month', values='minutes_played')
+    
+    # Sort months chronologically
+    pivot_data = pivot_data.reindex(sorted(pivot_data.columns), axis=1)
+    
+    # Create the plot
+    plt.figure(figsize=(15, 8))
+    
+    # Plot each month's data
+    x = np.arange(len(pivot_data.index))
+    width = 0.15  # Width of bars
+    months = pivot_data.columns
+    
+    for i, month in enumerate(months):
+        values = pivot_data[month].fillna(0)
+        plt.bar(x + (i * width), values, width, label=month.strftime('%B %Y'))
+    
+    # Customize the plot
+    plt.xlabel('Artist')
+    plt.ylabel('Minutes Played')
+    plt.title('Top 5 Artists by Month')
+    plt.xticks(x + width * 2, pivot_data.index, rotation=45, ha='right')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig(os.path.join(graphs_dir, 'monthly_top_artists.png'))
+    plt.close()
+
+def create_monthly_artist_grid(history, graphs_dir):
+    """Create a grid of artist images organized by month."""
+    try:
+        load_dotenv()
+        CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+        CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+        if not CLIENT_ID or not CLIENT_SECRET:
+            print("Error: Spotify API credentials not found in .env file")
+            return
+
+        def get_access_token(client_id, client_secret):
+            token_url = "https://accounts.spotify.com/api/token"
+            payload = {
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret
+            }
+            response = requests.post(token_url, data=payload)
+            if response.status_code != 200:
+                print(f"Error getting access token: {response.status_code}")
+                return None
+            return response.json()["access_token"]
+
+        access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+        if not access_token:
+            print("Failed to get access token")
+            return
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # Get top 5 artists for each month
+        monthly_top_artists = history.groupby(['month', 'artist'])['minutes_played'].sum().reset_index()
+        monthly_top_artists = monthly_top_artists.sort_values(['month', 'minutes_played'], ascending=[True, False])
+        monthly_top_artists = monthly_top_artists.groupby('month').head(5)
+        
+        # Get unique artists
+        unique_artists = monthly_top_artists['artist'].unique()
+        artist_images = {}
+        artist_to_id = {}  # Store artist name to ID mapping
+        
+        # Create cache directory if it doesn't exist
+        cache_dir = os.path.join(graphs_dir, 'image_cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Search for each artist and get their image
+        for artist in unique_artists:
+            try:
+                # Check if we already have the artist ID
+                if artist not in artist_to_id:
+                    # Search for the artist
+                    search_url = f"https://api.spotify.com/v1/search?q={requests.utils.quote(artist)}&type=artist&limit=1"
+                    response = requests.get(search_url, headers=headers)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['artists']['items']:
+                            artist_data = data['artists']['items'][0]
+                            artist_to_id[artist] = artist_data['id']
+                            print(f"Found ID for {artist}: {artist_data['id']}")
+                        else:
+                            print(f"No artist found for {artist}")
+                            continue
+                    else:
+                        print(f"Error searching for {artist}: {response.status_code}")
+                        continue
+                
+                artist_id = artist_to_id[artist]
+                cache_path = os.path.join(cache_dir, f"{artist_id}.jpg")
+                
+                # Check if image exists in cache
+                if os.path.exists(cache_path):
+                    print(f"Using cached image for {artist}")
+                    artist_images[artist] = cache_path
+                else:
+                    # Search for the artist to get their image
+                    search_url = f"https://api.spotify.com/v1/search?q={requests.utils.quote(artist)}&type=artist&limit=1"
+                    response = requests.get(search_url, headers=headers)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data['artists']['items']:
+                            artist_data = data['artists']['items'][0]
+                            if artist_data['images']:
+                                # Download and cache the image
+                                img_url = artist_data['images'][0]['url']
+                                img_response = requests.get(img_url)
+                                if img_response.status_code == 200:
+                                    with open(cache_path, 'wb') as f:
+                                        f.write(img_response.content)
+                                    print(f"Cached image for {artist}")
+                                    artist_images[artist] = cache_path
+                                else:
+                                    print(f"Error downloading image for {artist}")
+                            else:
+                                print(f"No image found for {artist}")
+                        else:
+                            print(f"No artist found for {artist}")
+                    else:
+                        print(f"Error searching for {artist}: {response.status_code}")
+                
+                # Rate limiting
+                time.sleep(0.5)
+                
+            except Exception as e:
+                print(f"Error processing {artist}: {str(e)}")
+                continue
+
+        # Create the grid
+        months = sorted(monthly_top_artists['month'].unique())
+        # Make the figure smaller and adjust the spacing
+        fig, axes = plt.subplots(len(months), 5, figsize=(10, 2*len(months)))
+        fig.subplots_adjust(wspace=0, hspace=0)  # Remove spacing between subplots
+        
+        for i, month in enumerate(months):
+            month_artists = monthly_top_artists[monthly_top_artists['month'] == month]
+            
+            for j, (_, row) in enumerate(month_artists.iterrows()):
+                ax = axes[i, j]
+                artist = row['artist']
+                
+                if artist in artist_images:
+                    try:
+                        # Load image from cache
+                        img = Image.open(artist_images[artist])
+                        ax.imshow(img)
+                        
+                        # Add ranking number in top-left corner
+                        ax.text(0.05, 0.95, f"#{j+1}", 
+                               ha='left', va='top', 
+                               transform=ax.transAxes,
+                               color='white',
+                               fontsize=10,
+                               fontweight='bold',
+                               bbox=dict(facecolor='black', alpha=0.7, edgecolor='none', pad=2))
+                        
+                        # Add artist name at bottom
+                        ax.text(0.5, 0.05, artist, 
+                               ha='center', va='bottom', 
+                               transform=ax.transAxes,
+                               color='white',
+                               fontsize=8,
+                               bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=2))
+                    except Exception as e:
+                        print(f"Error loading image for {artist}: {e}")
+                        ax.text(0.5, 0.5, artist, ha='center', va='center', wrap=True)
+                else:
+                    ax.text(0.5, 0.5, artist, ha='center', va='center', wrap=True)
+                
+                ax.axis('off')
+                if j == 0:  # Add month label only for first column
+                    # Create a background for the month label
+                    ax.text(-0.1, 0.5, month.strftime('%B %Y'), 
+                           ha='right', va='center', 
+                           transform=ax.transAxes,
+                           color='white',
+                           fontsize=10,
+                           fontweight='bold',
+                           bbox=dict(facecolor='black', alpha=0.7, edgecolor='none', pad=5))
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(graphs_dir, 'monthly_artist_grid.png'), 
+                   bbox_inches='tight', 
+                   dpi=300,
+                   pad_inches=0)
+        plt.close()
+        
+    except Exception as e:
+        print(f"Error in monthly artist grid creation: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
 def create_visualizations(history, graphs_dir):
     """Create all the standard visualizations and save them to the graphs directory."""
     # Set consistent style for all plots
@@ -33,6 +243,12 @@ def create_visualizations(history, graphs_dir):
     
     # Add month column for time-based analysis
     history['month'] = history['timestamp'].dt.to_period('M')
+
+    # Create monthly top artists visualization
+    create_monthly_top_artists(history, graphs_dir)
+
+    # Create monthly artist grid visualization
+    create_monthly_artist_grid(history, graphs_dir)
 
     # ARTISTS 
     # --- Visualization 1: Top Artists ---
@@ -241,6 +457,7 @@ def create_visualizations(history, graphs_dir):
         'listening_by_hour.png',
         'listening_heatmap.png',
         'listening_by_month.png',
+        'monthly_artist_grid.png',
     ]
     
     all_images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') 
@@ -502,6 +719,7 @@ def update_readme_with_visualizations(graphs_dir):
     
     # Add each visualization with a description
     viz_descriptions = {
+        'monthly_artist_grid.png': 'Top 5 Artists by Month (with Artist Images)',
         'top_artists.png': 'Top 10 Artists by Listening Time',
         'artist_diversity.png': 'Top 10 Artists by Number of Plays',
         'top_artists_over_time.png': 'Top 5 Artists\' Listening Time Over Months',

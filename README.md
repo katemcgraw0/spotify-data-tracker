@@ -8,7 +8,18 @@ Script run every hour with github actions to ensure no data is lost.
 ## Visualizations
 
 
+
+
+
+
+
+
+
 ### Latest Analysis
+
+#### Top 5 Artists by Month (with Artist Images)
+
+![Top 5 Artists by Month (with Artist Images)](graphs/monthly_artist_grid.png)
 
 #### Top 10 Artists by Listening Time
 
