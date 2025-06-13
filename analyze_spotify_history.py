@@ -15,6 +15,11 @@ import time
 
 def create_visualizations(history, graphs_dir):
     """Create all the standard visualizations and save them to the graphs directory."""
+    # Add month column for time-based analysis
+    history['month'] = history['timestamp'].dt.to_period('M')
+
+
+    # ARTISTS 
     # --- Visualization 1: Top Artists ---
     top_artists = history.groupby('artist')['minutes_played'].sum().sort_values(ascending=False).head(10)
     plt.figure(figsize=(10,6))
@@ -26,40 +31,7 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'top_artists.png'))
     plt.close()
 
-    # --- Visualization 2: Top Tracks ---
-    top_tracks = history.groupby(['track_name', 'artist', 'track_id'])['minutes_played'].sum().sort_values(ascending=False).head(10)
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=top_tracks.values, y=[f"{t[0]}\n({t[1]})" for t in top_tracks.index], palette="magma")
-    plt.title('Top 10 Tracks by Listening Time (minutes)')
-    plt.xlabel('Minutes Played')
-    plt.ylabel('Track (Artist)')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'top_tracks.png'))
-    plt.close()
-
-    # --- Visualization 3: Listening Over Time ---
-    daily = history.groupby('date')['minutes_played'].sum()
-    plt.figure(figsize=(12,6))
-    daily.plot()
-    plt.title('Listening Time per Day')
-    plt.xlabel('Date')
-    plt.ylabel('Minutes Played')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_over_time.png'))
-    plt.close()
-
-    # --- Visualization 4: Listening by Hour ---
-    hourly = history.groupby('hour')['minutes_played'].sum()
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=hourly.index, y=hourly.values, palette="coolwarm")
-    plt.title('Listening by Hour of Day')
-    plt.xlabel('Hour of Day')
-    plt.ylabel('Minutes Played')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_by_hour.png'))
-    plt.close()
-
-    # --- Visualization 5: Artist Diversity ---
+    # --- Visualization 2: Top 10 Artists by Number of Plays ---
     artist_counts = history['artist'].value_counts().head(10)
     plt.figure(figsize=(8,8))
     plt.pie(artist_counts.values, labels=artist_counts.index, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('pastel'))
@@ -68,84 +40,7 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'artist_diversity.png'))
     plt.close()
 
-
-
-    # --- Additional Visualizations ---
-    # Listening Heatmap
-    history['weekday'] = history['timestamp'].dt.day_name()
-    heatmap_data = history.groupby(['weekday', 'hour'])['minutes_played'].sum().unstack(fill_value=0)
-    heatmap_data = heatmap_data.reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-    plt.figure(figsize=(12,6))
-    sns.heatmap(heatmap_data, cmap='YlGnBu')
-    plt.title('Listening Heatmap (Day of Week x Hour)')
-    plt.xlabel('Hour of Day')
-    plt.ylabel('Day of Week')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_heatmap.png'))
-    plt.close()
-
-    # Monthly/Weekly Trends
-    history['month'] = history['timestamp'].dt.to_period('M')
-    history['week'] = history['timestamp'].dt.to_period('W')
-    monthly = history.groupby('month')['minutes_played'].sum()
-    weekly = history.groupby('week')['minutes_played'].sum()
-    
-    plt.figure(figsize=(10,5))
-    monthly.plot(kind='bar')
-    plt.title('Total Listening Time per Month')
-    plt.xlabel('Month')
-    plt.ylabel('Minutes Played')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_by_month.png'))
-    plt.close()
-    
-    plt.figure(figsize=(12,5))
-    weekly.plot()
-    plt.title('Total Listening Time per Week')
-    plt.xlabel('Week')
-    plt.ylabel('Minutes Played')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_by_week.png'))
-    plt.close()
-
-    # Artist/Track Diversity per Month
-    artist_diversity = history.groupby('month')['artist'].nunique()
-    track_diversity = history.groupby('month')['track_name'].nunique()
-    plt.figure(figsize=(10,5))
-    artist_diversity.plot(label='Unique Artists')
-    track_diversity.plot(label='Unique Tracks')
-    plt.title('Artist and Track Diversity per Month')
-    plt.xlabel('Month')
-    plt.ylabel('Count')
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'diversity_per_month.png'))
-    plt.close()
-
-
-
-    # Artist Discovery Over Time
-    history['month'] = history['timestamp'].dt.to_period('M')
-    new_artists_per_month = history.groupby('month')['artist'].nunique()
-    cumulative_artists = history.groupby('month')['artist'].nunique().cumsum()
-    
-    fig, ax1 = plt.subplots(figsize=(12,6))
-    
-    ax1.bar(new_artists_per_month.index.astype(str), new_artists_per_month.values, 
-            alpha=0.3, label='New Artists')
-
-    
-    ax1.set_xlabel('Month')
-    ax1.set_ylabel('New Artists per Month')
-    
-    plt.title('Artist Discovery Over Time')
-    lines1, labels1 = ax1.get_legend_handles_labels()
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'artist_discovery.png'))
-    plt.close()
-
-    # Top Artists' Popularity Over Time
+    # --- Visualization 3: Top Artists' Popularity Over Time ---
     top_artists_monthly = history[history['artist'].isin(top_artists.index[:5])].groupby(['month', 'artist'])['minutes_played'].sum().unstack()
     
     plt.figure(figsize=(12,6))
@@ -158,7 +53,31 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'top_artists_over_time.png'))
     plt.close()
 
-    # Top Tracks' Popularity Over Time
+    # TRACKS
+
+    # --- Visualization 4: Top Tracks by Number of Minutes Played ---
+    top_tracks_minutes = history.groupby(['track_name', 'artist'])['minutes_played'].sum().sort_values(ascending=False).head(10)
+    plt.figure(figsize=(10,6))
+    sns.barplot(x=top_tracks_minutes.values, y=[f"{t[0]}\n({t[1]})" for t in top_tracks_minutes.index], palette="viridis")
+    plt.title('Top 10 Tracks by Number of Minutes Played')
+    plt.xlabel('Minutes Played')
+    plt.ylabel('Track (Artist)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'top_tracks_minutes.png'))
+    plt.close()
+
+    # --- Visualization 5: Top Tracks by Number of Plays ---
+    top_tracks_plays = history.groupby(['track_name', 'artist']).size().sort_values(ascending=False).head(10)
+    plt.figure(figsize=(10,6))
+    sns.barplot(x=top_tracks_plays.values, y=[f"{t[0]}\n({t[1]})" for t in top_tracks_plays.index], palette="magma")
+    plt.title('Top 10 Tracks by Number of Plays')
+    plt.xlabel('Number of Plays')
+    plt.ylabel('Track (Artist)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'top_tracks_plays.png'))
+    plt.close()
+
+    # --- Visualization 6: Top Tracks Over Time ---
     top_tracks_monthly = history.groupby(['track_name', 'artist', 'month'])['minutes_played'].sum().reset_index()
     top_tracks_monthly['track_artist'] = top_tracks_monthly['track_name'] + ' (' + top_tracks_monthly['artist'] + ')'
     top_tracks_total = top_tracks_monthly.groupby(['track_name', 'artist'])['minutes_played'].sum().sort_values(ascending=False)
@@ -182,7 +101,103 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'top_tracks_over_time.png'))
     plt.close()
 
-    # Track Discovery Heatmap
+
+    # GENERAL LISTENING
+    # --- Visualization 7: Listening Over Time ---
+    daily = history.groupby('date')['minutes_played'].sum()
+    plt.figure(figsize=(12,6))
+    daily.plot()
+    plt.title('Listening Time per Day')
+    plt.xlabel('Date')
+    plt.ylabel('Minutes Played')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'listening_over_time.png'))
+    plt.close()
+
+    # --- Visualization 8: Listening by Hour ---
+    hourly = history.groupby('hour')['minutes_played'].sum()
+    plt.figure(figsize=(10,6))
+    sns.barplot(x=hourly.index, y=hourly.values, palette="coolwarm")
+    plt.title('Listening by Hour of Day')
+    plt.xlabel('Hour of Day')
+    plt.ylabel('Minutes Played')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'listening_by_hour.png'))
+    plt.close()
+
+
+    # --- Visualization 9: Listening Heatmap ---
+    history['weekday'] = history['timestamp'].dt.day_name()
+    heatmap_data = history.groupby(['weekday', 'hour'])['minutes_played'].sum().unstack(fill_value=0)
+    heatmap_data = heatmap_data.reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+    plt.figure(figsize=(12,6))
+    sns.heatmap(heatmap_data, cmap='YlGnBu')
+    plt.title('Listening Heatmap (Day of Week x Hour)')
+    plt.xlabel('Hour of Day')
+    plt.ylabel('Day of Week')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'listening_heatmap.png'))
+    plt.close()
+
+    # --- Visualization 10: Monthly/Weekly Trends ---
+    history['week'] = history['timestamp'].dt.to_period('W')
+    monthly = history.groupby('month')['minutes_played'].sum()
+    weekly = history.groupby('week')['minutes_played'].sum()
+    
+    plt.figure(figsize=(10,5))
+    monthly.plot(kind='bar')
+    plt.title('Total Listening Time per Month')
+    plt.xlabel('Month')
+    plt.ylabel('Minutes Played')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'listening_by_month.png'))
+    plt.close()
+    
+    plt.figure(figsize=(12,5))
+    weekly.plot()
+    plt.title('Total Listening Time per Week')
+    plt.xlabel('Week')
+    plt.ylabel('Minutes Played')
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'listening_by_week.png'))
+    plt.close()
+
+    # --- Visualization 11: Artist/Track Diversity per Month ---
+    artist_diversity = history.groupby('month')['artist'].nunique()
+    track_diversity = history.groupby('month')['track_name'].nunique()
+    plt.figure(figsize=(10,5))
+    artist_diversity.plot(label='Unique Artists')
+    track_diversity.plot(label='Unique Tracks')
+    plt.title('Artist and Track Diversity per Month')
+    plt.xlabel('Month')
+    plt.ylabel('Count')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'diversity_per_month.png'))
+    plt.close()
+
+    # --- Visualization 12: New Artist Discovery Over Time ---
+    history['month'] = history['timestamp'].dt.to_period('M')
+    new_artists_per_month = history.groupby('month')['artist'].nunique()
+    cumulative_artists = history.groupby('month')['artist'].nunique().cumsum()
+    
+    fig, ax1 = plt.subplots(figsize=(12,6))
+    
+    ax1.bar(new_artists_per_month.index.astype(str), new_artists_per_month.values, 
+            alpha=0.3, label='New Artists')
+
+    ax1.set_xlabel('Month')
+    ax1.set_ylabel('New Artists per Month')
+    
+    plt.title('Artist Discovery Over Time')
+    lines1, labels1 = ax1.get_legend_handles_labels()
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(graphs_dir, 'artist_discovery.png'))
+    plt.close()
+
+
+    # --- Visualization 13: Track Discovery Heatmap ---
     first_play = history.groupby(['track_name', 'artist'])['timestamp'].min().reset_index()
     first_play['month'] = first_play['timestamp'].dt.to_period('M')
     monthly_discoveries = first_play.groupby('month').size()
@@ -197,59 +212,30 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'track_discovery.png'))
     plt.close()
 
-    # Track Replay Patterns
-    track_replays = history.groupby(['track_name', 'artist', 'month']).size().reset_index(name='plays')
-    track_replays['track_artist'] = track_replays['track_name'] + ' (' + track_replays['artist'] + ')'
-    
-    top_tracks_by_plays = track_replays.groupby('track_artist')['plays'].sum().sort_values(ascending=False).head(5)
-    
-    plt.figure(figsize=(12,6))
-    for track in top_tracks_by_plays.index:
-        track_data = track_replays[track_replays['track_artist'] == track]
-        plt.plot(track_data['month'].astype(str), track_data['plays'], 
-                marker='o', label=track)
-    
-    plt.title('Monthly Play Count for Top 5 Most Played Tracks')
-    plt.xlabel('Month')
-    plt.ylabel('Number of Plays')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'track_replay_patterns.png'))
-    plt.close()
 
-    # --- New Visualizations ---
-    
-    # Listening Streaks Analysis
+
+    # --- Visualization 14: Listening Streaks Analysis ---
     print("Creating listening streaks analysis...")
     daily_listening = history.groupby('date')['minutes_played'].sum()
     daily_listening = daily_listening[daily_listening > 0]  # Only consider days with listening
     
-
-
-
-
-
-
-   
-
     # Update the PDF with all visualizations
     all_image_files = [
         'top_artists.png',
-        'top_tracks.png',
-        'listening_over_time.png',
-        'listening_by_hour.png',
-        'artist_diversity.png',
+        'artist_diversity.png', 
         'top_artists_over_time.png',
-        'listening_heatmap.png',
-        'listening_by_month.png',
-        'listening_by_week.png',
+        'top_tracks_minutes.png',
+        'top_tracks_plays.png',
+        'top_tracks_over_time.png',
         'diversity_per_month.png',
         'artist_discovery.png',
         'track_discovery.png',
-        'top_tracks_over_time.png',
-        ]
-    
+        'listening_over_time.png', 
+        'listening_by_hour.png',
+        'listening_heatmap.png',
+        'listening_by_month.png',
+        'listening_by_week.png'
+    ]
     all_images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') 
                  for img in all_image_files if os.path.exists(os.path.join(graphs_dir, img))]
     if all_images:
