@@ -68,17 +68,7 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'artist_diversity.png'))
     plt.close()
 
-    # --- Combine all PNGs into a single PDF ---
-    image_files = [
-        'top_artists.png',
-        'top_tracks.png',
-        'listening_over_time.png',
-        'listening_by_hour.png',
-        'artist_diversity.png'
-    ]
-    images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') for img in image_files if os.path.exists(os.path.join(graphs_dir, img))]
-    if images:
-        images[0].save(os.path.join(graphs_dir, 'spotify_analysis.pdf'), save_all=True, append_images=images[1:])
+
 
     # --- Additional Visualizations ---
     # Listening Heatmap
@@ -132,19 +122,7 @@ def create_visualizations(history, graphs_dir):
     plt.savefig(os.path.join(graphs_dir, 'diversity_per_month.png'))
     plt.close()
 
-    # Time of Day Distribution
-    history['time_of_day'] = pd.cut(history['hour'], 
-                                  bins=[0, 6, 12, 18, 24],
-                                  labels=['Night', 'Morning', 'Afternoon', 'Evening'])
-    time_dist = history.groupby('time_of_day')['minutes_played'].sum()
-    
-    plt.figure(figsize=(8,8))
-    plt.pie(time_dist.values, labels=time_dist.index, autopct='%1.1f%%', 
-            colors=sns.color_palette('pastel'))
-    plt.title('Listening Time Distribution by Time of Day')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'time_of_day_distribution.png'))
-    plt.close()
+
 
     # Artist Discovery Over Time
     history['month'] = history['timestamp'].dt.to_period('M')
@@ -152,21 +130,17 @@ def create_visualizations(history, graphs_dir):
     cumulative_artists = history.groupby('month')['artist'].nunique().cumsum()
     
     fig, ax1 = plt.subplots(figsize=(12,6))
-    ax2 = ax1.twinx()
     
     ax1.bar(new_artists_per_month.index.astype(str), new_artists_per_month.values, 
             alpha=0.3, label='New Artists')
-    ax2.plot(cumulative_artists.index.astype(str), cumulative_artists.values, 
-             'r-', label='Cumulative Artists')
+
     
     ax1.set_xlabel('Month')
     ax1.set_ylabel('New Artists per Month')
-    ax2.set_ylabel('Cumulative Unique Artists')
     
     plt.title('Artist Discovery Over Time')
     lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'artist_discovery.png'))
     plt.close()
@@ -251,115 +225,30 @@ def create_visualizations(history, graphs_dir):
     daily_listening = history.groupby('date')['minutes_played'].sum()
     daily_listening = daily_listening[daily_listening > 0]  # Only consider days with listening
     
-    # Calculate streaks
-    dates = pd.Series(daily_listening.index)
-    streak_lengths = []
-    current_streak = 1
-    
-    for i in range(1, len(dates)):
-        if (dates[i] - dates[i-1]).days == 1:
-            current_streak += 1
-        else:
-            streak_lengths.append(current_streak)
-            current_streak = 1
-    streak_lengths.append(current_streak)
-    
-    plt.figure(figsize=(10,6))
-    sns.histplot(streak_lengths, bins=range(1, max(streak_lengths) + 2))
-    plt.title('Distribution of Consecutive Days of Listening')
-    plt.xlabel('Streak Length (days)')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_streaks.png'))
-    plt.close()
 
-    # Repeat Listening Patterns
-    print("Creating repeat listening patterns...")
-    track_repeats = history.groupby(['date', 'track_name', 'artist']).size().reset_index(name='plays')
-    repeat_distribution = track_repeats['plays'].value_counts().sort_index()
-    
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=repeat_distribution.index, y=repeat_distribution.values)
-    plt.title('Distribution of Track Repeats Within a Day')
-    plt.xlabel('Number of Times Played in a Day')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'repeat_patterns.png'))
-    plt.close()
 
-    # First/Last Time Listened for Top Artists
-    print("Creating first/last time analysis for top artists...")
-    top_artists = history.groupby('artist')['minutes_played'].sum().sort_values(ascending=False).head(5).index
-    artist_first_last = history[history['artist'].isin(top_artists)].groupby('artist').agg({
-        'timestamp': ['min', 'max']
-    })
-    
-    plt.figure(figsize=(12,6))
-    for artist in top_artists:
-        first = artist_first_last.loc[artist, ('timestamp', 'min')]
-        last = artist_first_last.loc[artist, ('timestamp', 'max')]
-        plt.plot([first, last], [artist, artist], 'o-', label=artist)
-    
-    plt.title('First and Last Time Listened for Top 5 Artists')
-    plt.xlabel('Date')
-    plt.ylabel('Artist')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'artist_first_last.png'))
-    plt.close()
 
-    # Listening Gaps Analysis
-    print("Creating listening gaps analysis...")
-    dates = pd.Series(daily_listening.index)
-    gaps = [(dates[i] - dates[i-1]).days for i in range(1, len(dates))]
-    
-    plt.figure(figsize=(10,6))
-    sns.histplot(gaps, bins=range(0, max(gaps) + 2))
-    plt.title('Distribution of Days Between Listening Sessions')
-    plt.xlabel('Days Between Sessions')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_gaps.png'))
-    plt.close()
 
-    # Session Length Distribution
-    print("Creating session length analysis...")
-    # Define a session as plays within 30 minutes of each other
-    history = history.sort_values('timestamp')
-    history['time_diff'] = history['timestamp'].diff()
-    history['new_session'] = history['time_diff'] > pd.Timedelta(minutes=30)
-    history['session_id'] = history['new_session'].cumsum()
-    
-    session_lengths = history.groupby('session_id')['minutes_played'].sum()
-    
-    plt.figure(figsize=(10,6))
-    sns.histplot(session_lengths, bins=50)
-    plt.title('Distribution of Listening Session Lengths')
-    plt.xlabel('Session Length (minutes)')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'session_lengths.png'))
-    plt.close()
+
+
+   
 
     # Update the PDF with all visualizations
     all_image_files = [
-        # Original visualizations
         'top_artists.png',
         'top_tracks.png',
         'listening_over_time.png',
         'listening_by_hour.png',
         'artist_diversity.png',
+        'top_artists_over_time.png',
         'listening_heatmap.png',
         'listening_by_month.png',
         'listening_by_week.png',
         'diversity_per_month.png',
-        'time_of_day_distribution.png',
         'artist_discovery.png',
-        'top_artists_over_time.png',
-        'top_tracks_over_time.png',
         'track_discovery.png',
-        'track_replay_patterns.png'
-    ]
+        'top_tracks_over_time.png',
+        ]
     
     all_images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') 
                  for img in all_image_files if os.path.exists(os.path.join(graphs_dir, img))]
