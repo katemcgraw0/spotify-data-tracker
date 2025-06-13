@@ -93,7 +93,7 @@ def create_monthly_artist_grid(history, graphs_dir):
         artist_to_id = {}  # Store artist name to ID mapping
         
         # Create cache directory if it doesn't exist
-        cache_dir = os.path.join(graphs_dir, 'image_cache')
+        cache_dir = os.path.join(graphs_dir, 'image_cache/artists')
         os.makedirs(cache_dir, exist_ok=True)
         
         # Search for each artist and get their image
@@ -572,6 +572,10 @@ def fetch_album_covers(history, graphs_dir):
         # Initialize rate limiter with more conservative limits
         rate_limiter = RateLimiter(max_requests=8, window_seconds=60)
 
+        # Create cache directory for album covers
+        cache_dir = os.path.join(graphs_dir, 'image_cache/albums')
+        os.makedirs(cache_dir, exist_ok=True)
+
         # Get all unique tracks and their album IDs
         print("\nFetching album information for unique tracks...")
         unique_tracks = history[['track_name', 'artist', 'track_id']].drop_duplicates()
@@ -649,10 +653,25 @@ def fetch_album_covers(history, graphs_dir):
                     for album in data['albums']:
                         if album and album['images']:
                             try:
-                                img_url = album['images'][0]['url']
-                                img_data = requests.get(img_url).content
-                                img = Image.open(io.BytesIO(img_data)).resize((100, 100))
-                                album_covers[album['id']] = img
+                                album_id = album['id']
+                                cache_path = os.path.join(cache_dir, f"{album_id}.jpg")
+                                
+                                # Check if image exists in cache
+                                if os.path.exists(cache_path):
+                                    print(f"Using cached album cover for {album_id}")
+                                    album_covers[album_id] = Image.open(cache_path)
+                                else:
+                                    img_url = album['images'][0]['url']
+                                    img_response = requests.get(img_url)
+                                    if img_response.status_code == 200:
+                                        # Save to cache
+                                        with open(cache_path, 'wb') as f:
+                                            f.write(img_response.content)
+                                        print(f"Cached album cover for {album_id}")
+                                        album_covers[album_id] = Image.open(cache_path)
+                                    else:
+                                        print(f"Error downloading album cover for {album_id}")
+                                        album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
                             except Exception as e:
                                 print(f"\nError loading image for album {album['id']}: {e}")
                                 album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
