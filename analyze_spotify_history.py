@@ -267,7 +267,7 @@ def create_visualizations(history, graphs_dir):
     plt.figure(figsize=BAR_FIGSIZE)
     sns.barplot(x=artist_counts.values, y=artist_counts.index, hue=artist_counts.index, legend=False)
     plt.title('Top 10 Artists by Number of Plays')
-    plt.xlabel('Number of Plays')
+    plt.xlabel('Total Number of Plays')
     plt.ylabel('Artist')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'artist_diversity.png'))
@@ -306,7 +306,7 @@ def create_visualizations(history, graphs_dir):
     track_labels = [f"{t[0]}\n({t[1]})" for t in top_tracks_plays.index]
     sns.barplot(x=top_tracks_plays.values, y=track_labels, hue=track_labels, legend=False)
     plt.title('Top 10 Tracks by Number of Plays')
-    plt.xlabel('Number of Plays')
+    plt.xlabel('Total Number of Plays')
     plt.ylabel('Track (Artist)')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'top_tracks_plays.png'))

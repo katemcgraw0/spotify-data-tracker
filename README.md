@@ -15,6 +15,7 @@ Script run every hour with github actions to ensure no data is lost.
 
 
 
+
 ### Latest Analysis
 
 #### Top 5 Artists by Month (with Artist Images)
