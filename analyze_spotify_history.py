@@ -15,17 +15,32 @@ import time
 
 def create_visualizations(history, graphs_dir):
     """Create all the standard visualizations and save them to the graphs directory."""
+    # Set consistent style for all plots
+    plt.style.use('seaborn-v0_8')  # Use a valid style name
+    sns.set_theme(style="whitegrid")  # Set seaborn theme
+    
+    # Common figure sizes
+    BAR_FIGSIZE = (12, 6)
+    PIE_FIGSIZE = (10, 10)
+    LINE_FIGSIZE = (15, 8)
+    
+    # Common formatting
+    plt.rcParams['font.size'] = 12
+    plt.rcParams['axes.titlesize'] = 14
+    plt.rcParams['axes.labelsize'] = 12
+    plt.rcParams['axes.grid'] = True
+    plt.rcParams['grid.alpha'] = 0.3
+    
     # Add month column for time-based analysis
     history['month'] = history['timestamp'].dt.to_period('M')
-
 
     # ARTISTS 
     # --- Visualization 1: Top Artists ---
     top_artists = history.groupby('artist')['minutes_played'].sum().sort_values(ascending=False).head(10)
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=top_artists.values, y=top_artists.index, palette="viridis")
-    plt.title('Top 10 Artists by Listening Time (minutes)')
-    plt.xlabel('Minutes Played')
+    plt.figure(figsize=BAR_FIGSIZE)
+    sns.barplot(x=top_artists.values, y=top_artists.index, hue=top_artists.index, legend=False)
+    plt.title('Top 10 Artists by Listening Time')
+    plt.xlabel('Total Minutes Played')
     plt.ylabel('Artist')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'top_artists.png'))
@@ -33,9 +48,11 @@ def create_visualizations(history, graphs_dir):
 
     # --- Visualization 2: Top 10 Artists by Number of Plays ---
     artist_counts = history['artist'].value_counts().head(10)
-    plt.figure(figsize=(8,8))
-    plt.pie(artist_counts.values, labels=artist_counts.index, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('pastel'))
+    plt.figure(figsize=BAR_FIGSIZE)
+    sns.barplot(x=artist_counts.values, y=artist_counts.index, hue=artist_counts.index, legend=False)
     plt.title('Top 10 Artists by Number of Plays')
+    plt.xlabel('Number of Plays')
+    plt.ylabel('Artist')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'artist_diversity.png'))
     plt.close()
@@ -43,24 +60,25 @@ def create_visualizations(history, graphs_dir):
     # --- Visualization 3: Top Artists' Popularity Over Time ---
     top_artists_monthly = history[history['artist'].isin(top_artists.index[:5])].groupby(['month', 'artist'])['minutes_played'].sum().unstack()
     
-    plt.figure(figsize=(12,6))
-    top_artists_monthly.plot()
+    plt.figure(figsize=LINE_FIGSIZE)
+    top_artists_monthly.plot(marker='o')
     plt.title('Top 5 Artists\' Listening Time Over Months')
     plt.xlabel('Month')
     plt.ylabel('Minutes Played')
-    plt.legend(title='Artist')
+    plt.legend(title='Artist', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'top_artists_over_time.png'))
     plt.close()
 
     # TRACKS
-
     # --- Visualization 4: Top Tracks by Number of Minutes Played ---
     top_tracks_minutes = history.groupby(['track_name', 'artist'])['minutes_played'].sum().sort_values(ascending=False).head(10)
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=top_tracks_minutes.values, y=[f"{t[0]}\n({t[1]})" for t in top_tracks_minutes.index], palette="viridis")
-    plt.title('Top 10 Tracks by Number of Minutes Played')
-    plt.xlabel('Minutes Played')
+    plt.figure(figsize=BAR_FIGSIZE)
+    track_labels = [f"{t[0]}\n({t[1]})" for t in top_tracks_minutes.index]
+    sns.barplot(x=top_tracks_minutes.values, y=track_labels, hue=track_labels, legend=False)
+    plt.title('Top 10 Tracks by Listening Time')
+    plt.xlabel('Total Minutes Played')
     plt.ylabel('Track (Artist)')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'top_tracks_minutes.png'))
@@ -68,8 +86,9 @@ def create_visualizations(history, graphs_dir):
 
     # --- Visualization 5: Top Tracks by Number of Plays ---
     top_tracks_plays = history.groupby(['track_name', 'artist']).size().sort_values(ascending=False).head(10)
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=top_tracks_plays.values, y=[f"{t[0]}\n({t[1]})" for t in top_tracks_plays.index], palette="magma")
+    plt.figure(figsize=BAR_FIGSIZE)
+    track_labels = [f"{t[0]}\n({t[1]})" for t in top_tracks_plays.index]
+    sns.barplot(x=top_tracks_plays.values, y=track_labels, hue=track_labels, legend=False)
     plt.title('Top 10 Tracks by Number of Plays')
     plt.xlabel('Number of Plays')
     plt.ylabel('Track (Artist)')
@@ -83,7 +102,7 @@ def create_visualizations(history, graphs_dir):
     top_tracks_total = top_tracks_monthly.groupby(['track_name', 'artist'])['minutes_played'].sum().sort_values(ascending=False)
     top_10_tracks = top_tracks_total.head(10).index
     
-    plt.figure(figsize=(15,8))
+    plt.figure(figsize=LINE_FIGSIZE)
     for track_name, artist in top_10_tracks:
         track_data = top_tracks_monthly[
             (top_tracks_monthly['track_name'] == track_name) & 
@@ -97,42 +116,43 @@ def create_visualizations(history, graphs_dir):
     plt.ylabel('Minutes Played')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'top_tracks_over_time.png'))
     plt.close()
 
-
     # GENERAL LISTENING
     # --- Visualization 7: Listening Over Time ---
     daily = history.groupby('date')['minutes_played'].sum()
-    plt.figure(figsize=(12,6))
-    daily.plot()
-    plt.title('Listening Time per Day')
+    plt.figure(figsize=LINE_FIGSIZE)
+    daily.plot(marker='o', alpha=0.7)
+    plt.title('Daily Listening Time')
     plt.xlabel('Date')
     plt.ylabel('Minutes Played')
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'listening_over_time.png'))
     plt.close()
 
     # --- Visualization 8: Listening by Hour ---
     hourly = history.groupby('hour')['minutes_played'].sum()
-    plt.figure(figsize=(10,6))
-    sns.barplot(x=hourly.index, y=hourly.values, palette="coolwarm")
-    plt.title('Listening by Hour of Day')
+    plt.figure(figsize=BAR_FIGSIZE)
+    sns.barplot(x=hourly.index, y=hourly.values, hue=hourly.index, legend=False)
+    plt.title('Listening Time by Hour of Day')
     plt.xlabel('Hour of Day')
     plt.ylabel('Minutes Played')
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'listening_by_hour.png'))
     plt.close()
 
-
     # --- Visualization 9: Listening Heatmap ---
     history['weekday'] = history['timestamp'].dt.day_name()
     heatmap_data = history.groupby(['weekday', 'hour'])['minutes_played'].sum().unstack(fill_value=0)
     heatmap_data = heatmap_data.reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-    plt.figure(figsize=(12,6))
-    sns.heatmap(heatmap_data, cmap='YlGnBu')
-    plt.title('Listening Heatmap (Day of Week x Hour)')
+    
+    plt.figure(figsize=(15, 8))
+    sns.heatmap(heatmap_data, cmap='viridis', cbar_kws={'label': 'Minutes Played'})
+    plt.title('Listening Time Heatmap (Day of Week × Hour)')
     plt.xlabel('Hour of Day')
     plt.ylabel('Day of Week')
     plt.tight_layout()
@@ -144,81 +164,68 @@ def create_visualizations(history, graphs_dir):
     monthly = history.groupby('month')['minutes_played'].sum()
     weekly = history.groupby('week')['minutes_played'].sum()
     
-    plt.figure(figsize=(10,5))
-    monthly.plot(kind='bar')
-    plt.title('Total Listening Time per Month')
-    plt.xlabel('Month')
-    plt.ylabel('Minutes Played')
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12))
+    
+    monthly.plot(kind='bar', ax=ax1)
+    ax1.set_title('Monthly Listening Time')
+    ax1.set_xlabel('Month')
+    ax1.set_ylabel('Minutes Played')
+    ax1.grid(True, alpha=0.3)
+    
+    weekly.plot(ax=ax2)
+    ax2.set_title('Weekly Listening Time')
+    ax2.set_xlabel('Week')
+    ax2.set_ylabel('Minutes Played')
+    ax2.grid(True, alpha=0.3)
+    
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'listening_by_month.png'))
-    plt.close()
-    
-    plt.figure(figsize=(12,5))
-    weekly.plot()
-    plt.title('Total Listening Time per Week')
-    plt.xlabel('Week')
-    plt.ylabel('Minutes Played')
-    plt.tight_layout()
-    plt.savefig(os.path.join(graphs_dir, 'listening_by_week.png'))
     plt.close()
 
     # --- Visualization 11: Artist/Track Diversity per Month ---
     artist_diversity = history.groupby('month')['artist'].nunique()
     track_diversity = history.groupby('month')['track_name'].nunique()
-    plt.figure(figsize=(10,5))
-    artist_diversity.plot(label='Unique Artists')
-    track_diversity.plot(label='Unique Tracks')
-    plt.title('Artist and Track Diversity per Month')
+    
+    plt.figure(figsize=LINE_FIGSIZE)
+    artist_diversity.plot(marker='o', label='Unique Artists', color='#1f77b4')
+    track_diversity.plot(marker='o', label='Unique Tracks', color='#ff7f0e')
+    plt.title('Artist and Track Diversity Over Time')
     plt.xlabel('Month')
-    plt.ylabel('Count')
+    plt.ylabel('Number of Unique Items')
     plt.legend()
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'diversity_per_month.png'))
     plt.close()
 
     # --- Visualization 12: New Artist Discovery Over Time ---
-    history['month'] = history['timestamp'].dt.to_period('M')
     new_artists_per_month = history.groupby('month')['artist'].nunique()
-    cumulative_artists = history.groupby('month')['artist'].nunique().cumsum()
     
-    fig, ax1 = plt.subplots(figsize=(12,6))
-    
-    ax1.bar(new_artists_per_month.index.astype(str), new_artists_per_month.values, 
-            alpha=0.3, label='New Artists')
-
-    ax1.set_xlabel('Month')
-    ax1.set_ylabel('New Artists per Month')
-    
-    plt.title('Artist Discovery Over Time')
-    lines1, labels1 = ax1.get_legend_handles_labels()
-
+    plt.figure(figsize=LINE_FIGSIZE)
+    new_artists_per_month.plot(kind='bar')
+    plt.title('New Artists Discovered per Month')
+    plt.xlabel('Month')
+    plt.ylabel('Number of New Artists')
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'artist_discovery.png'))
     plt.close()
-
 
     # --- Visualization 13: Track Discovery Heatmap ---
     first_play = history.groupby(['track_name', 'artist'])['timestamp'].min().reset_index()
     first_play['month'] = first_play['timestamp'].dt.to_period('M')
     monthly_discoveries = first_play.groupby('month').size()
     
-    plt.figure(figsize=(12,6))
+    plt.figure(figsize=LINE_FIGSIZE)
     monthly_discoveries.plot(kind='bar')
-    plt.title('Number of New Tracks Discovered Each Month')
+    plt.title('New Tracks Discovered per Month')
     plt.xlabel('Month')
     plt.ylabel('Number of New Tracks')
-    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(graphs_dir, 'track_discovery.png'))
     plt.close()
 
-
-
-    # --- Visualization 14: Listening Streaks Analysis ---
-    print("Creating listening streaks analysis...")
-    daily_listening = history.groupby('date')['minutes_played'].sum()
-    daily_listening = daily_listening[daily_listening > 0]  # Only consider days with listening
-    
     # Update the PDF with all visualizations
     all_image_files = [
         'top_artists.png',
@@ -234,8 +241,8 @@ def create_visualizations(history, graphs_dir):
         'listening_by_hour.png',
         'listening_heatmap.png',
         'listening_by_month.png',
-        'listening_by_week.png'
     ]
+    
     all_images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') 
                  for img in all_image_files if os.path.exists(os.path.join(graphs_dir, img))]
     if all_images:
@@ -478,6 +485,62 @@ def fetch_album_covers(history, graphs_dir):
         import traceback
         traceback.print_exc()
 
+def update_readme_with_visualizations(graphs_dir):
+    """Update the README.md file with the generated visualizations."""
+    readme_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
+    
+    # Read existing README content
+    with open(readme_path, 'r') as f:
+        content = f.read()
+    
+    # Find the end of the existing content
+    if '## Visualizations' not in content:
+        content += '\n\n## Visualizations\n\n'
+    
+    # Create visualization section
+    viz_section = '\n### Latest Analysis\n\n'
+    
+    # Add each visualization with a description
+    viz_descriptions = {
+        'top_artists.png': 'Top 10 Artists by Listening Time',
+        'artist_diversity.png': 'Top 10 Artists by Number of Plays',
+        'top_artists_over_time.png': 'Top 5 Artists\' Listening Time Over Months',
+        'top_tracks_minutes.png': 'Top 10 Tracks by Listening Time',
+        'top_tracks_plays.png': 'Top 10 Tracks by Number of Plays',
+        'top_tracks_over_time.png': 'Top 10 Tracks\' Listening Time Over Months',
+        'diversity_per_month.png': 'Artist and Track Diversity Over Time',
+        'artist_discovery.png': 'New Artists Discovered per Month',
+        'track_discovery.png': 'New Tracks Discovered per Month',
+        'listening_over_time.png': 'Daily Listening Time',
+        'listening_by_hour.png': 'Listening Time by Hour of Day',
+        'listening_heatmap.png': 'Listening Time Heatmap (Day of Week × Hour)',
+        'listening_by_month.png': 'Monthly and Weekly Listening Time',
+        'all_album_covers.png': 'Album Cover Grid'
+    }
+    
+    for img_file, description in viz_descriptions.items():
+        img_path = os.path.join(graphs_dir, img_file)
+        if os.path.exists(img_path):
+            # Get the relative path for the image
+            rel_path = os.path.relpath(img_path, os.path.dirname(readme_path))
+            viz_section += f'#### {description}\n\n'
+            viz_section += f'![{description}]({rel_path})\n\n'
+    
+    # Update the README content
+    if '### Latest Analysis' in content:
+        # Replace existing visualization section
+        parts = content.split('### Latest Analysis')
+        content = parts[0] + viz_section
+    else:
+        # Append new visualization section
+        content += viz_section
+    
+    # Write the updated content back to README
+    with open(readme_path, 'w') as f:
+        f.write(content)
+    
+    print("Updated README.md with latest visualizations")
+
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Analyze Spotify listening history and optionally create album cover visualization.')
@@ -526,6 +589,11 @@ def main():
         fetch_album_covers(history, graphs_dir)
     else:
         print("\nSkipping album cover visualization. Use --fetch-covers to generate it.")
+    
+    # Update README with visualizations
+    print("\nUpdating README with visualizations...")
+    update_readme_with_visualizations(graphs_dir)
+    print("README update complete!")
 
 if __name__ == '__main__':
     main() 
