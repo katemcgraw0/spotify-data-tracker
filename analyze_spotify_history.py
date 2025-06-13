@@ -714,8 +714,9 @@ def update_readme_with_visualizations(graphs_dir):
     if '## Visualizations' not in content:
         content += '\n\n## Visualizations\n\n'
     
-    # Create visualization section
-    viz_section = '\n### Latest Analysis\n\n'
+    # Create visualization section with timestamp
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    viz_section = f'\n### Latest Analysis (Last Updated: {current_time})\n\n'
     
     # Add each visualization with a description
     viz_descriptions = {
