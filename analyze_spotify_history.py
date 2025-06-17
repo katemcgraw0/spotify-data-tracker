@@ -100,9 +100,11 @@ def create_monthly_artist_grid(history, graphs_dir):
         os.makedirs(cache_dir, exist_ok=True)
         
         # Search for each artist and get their image
+        print(f"Searching for {len(unique_artists)} artist ids and images...")
         for artist in unique_artists:
             try:
                 # Check if we already have the artist ID
+                
                 if artist not in artist_to_id:
                     # Search for the artist
                     search_url = f"https://api.spotify.com/v1/search?q={requests.utils.quote(artist)}&type=artist&limit=1"
@@ -113,7 +115,7 @@ def create_monthly_artist_grid(history, graphs_dir):
                         if data['artists']['items']:
                             artist_data = data['artists']['items'][0]
                             artist_to_id[artist] = artist_data['id']
-                            print(f"Found ID for {artist}: {artist_data['id']}")
+                            #print(f"Found ID for {artist}: {artist_data['id']}")
                         else:
                             print(f"No artist found for {artist}")
                             continue
@@ -126,7 +128,7 @@ def create_monthly_artist_grid(history, graphs_dir):
                 
                 # Check if image exists in cache
                 if os.path.exists(cache_path):
-                    print(f"Using cached image for {artist}")
+                    # print(f"Using cached image for {artist}")
                     artist_images[artist] = cache_path
                 else:
                     # Search for the artist to get their image
@@ -163,6 +165,7 @@ def create_monthly_artist_grid(history, graphs_dir):
                 continue
 
         # Create the grid
+        print(f"Creating grid of {len(artist_images)} artist images...")
         months = sorted(monthly_top_artists['month'].unique())
         # Make the figure smaller and adjust the spacing
         fig, axes = plt.subplots(len(months), 5, figsize=(10, 2*len(months)))
@@ -245,7 +248,8 @@ def create_visualizations(history, graphs_dir):
     plt.rcParams['grid.alpha'] = 0.3
     
     # Add month column for time-based analysis
-    history['month'] = history['timestamp'].dt.to_period('M')
+    # Convert to UTC to avoid timezone warnings
+    history['month'] = history['timestamp'].dt.tz_localize(None).dt.to_period('M')
 
     # Create monthly top artists visualization
     create_monthly_top_artists(history, graphs_dir)
@@ -379,7 +383,8 @@ def create_visualizations(history, graphs_dir):
     plt.close()
 
     # --- Visualization 10: Monthly/Weekly Trends ---
-    history['week'] = history['timestamp'].dt.to_period('W')
+    # Convert to UTC to avoid timezone warnings
+    history['week'] = history['timestamp'].dt.tz_localize(None).dt.to_period('W')
     monthly = history.groupby('month')['minutes_played'].sum()
     weekly = history.groupby('week')['minutes_played'].sum()
     
@@ -432,7 +437,8 @@ def create_visualizations(history, graphs_dir):
 
     # --- Visualization 13: Track Discovery Heatmap ---
     first_play = history.groupby(['track_name', 'artist'])['timestamp'].min().reset_index()
-    first_play['month'] = first_play['timestamp'].dt.to_period('M')
+    # Convert to UTC to avoid timezone warnings
+    first_play['month'] = first_play['timestamp'].dt.tz_localize(None).dt.to_period('M')
     monthly_discoveries = first_play.groupby('month').size()
     
     plt.figure(figsize=LINE_FIGSIZE)
@@ -488,8 +494,8 @@ def fetch_album_covers(history, graphs_dir):
                 "client_secret": client_secret
             }
             response = requests.post(token_url, data=payload)
-            print(f"\nToken request status: {response.status_code}")
-            print(f"Token response headers: {dict(response.headers)}")
+            print("\n=== Token Request ===")
+            print(f"Status: {response.status_code}")
             
             if response.status_code != 200:
                 print(f"Error getting access token: {response.status_code}")
@@ -504,7 +510,7 @@ def fetch_album_covers(history, graphs_dir):
             """Save the current state of the track-to-album cache."""
             with open(track_cache_path, 'w') as f:
                 json.dump(track_to_album, f, indent=2)
-            print(f"Updated cache with {len(track_to_album)} track-to-album mappings")
+            print(f"Cache updated: {len(track_to_album)} track-to-album mappings")
 
         access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
         if not access_token:
@@ -512,7 +518,6 @@ def fetch_album_covers(history, graphs_dir):
             return
 
         headers = {"Authorization": f"Bearer {access_token}"}
-        print("\nUsing headers:", headers)
 
         class RateLimiter:
             def __init__(self, max_requests=10, window_seconds=60):
@@ -548,12 +553,12 @@ def fetch_album_covers(history, graphs_dir):
             
             for attempt in range(max_retries):
                 try:
-                    # Only apply rate limiting for actual API calls
                     rate_limiter.wait_if_needed()
                     response = requests.get(url, headers=headers)
                     
                     if response.status_code == 401:  # Token expired
-                        print("\nAccess token expired. Refreshing token...")
+                        print("\n=== Token Refresh ===")
+                        print("Access token expired. Refreshing token...")
                         new_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
                         if new_token:
                             access_token = new_token
@@ -566,12 +571,13 @@ def fetch_album_covers(history, graphs_dir):
                     elif response.status_code == 429:  # Rate limit hit
                         retry_after = int(response.headers.get('Retry-After', 30))
                         retry_after = min(retry_after, 60)  # Cap at 60 seconds
-                        print(f"\nRate limit hit. Response body: {response.text}")
+                        print("\n=== Rate Limit Hit ===")
+                        print(f"Response: {response.text}")
                         print(f"Waiting {retry_after} seconds before retry...")
                         time.sleep(retry_after)
                         continue
                     elif response.status_code != 200:
-                        print(f"\nError response (attempt {attempt + 1}/{max_retries}):")
+                        print(f"\n=== Request Error (Attempt {attempt + 1}/{max_retries}) ===")
                         print(f"Status code: {response.status_code}")
                         print(f"Response: {response.text}")
                         if attempt < max_retries - 1:
@@ -583,7 +589,8 @@ def fetch_album_covers(history, graphs_dir):
                         
                     return response
                 except Exception as e:
-                    print(f"\nRequest failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                    print(f"\n=== Request Failed (Attempt {attempt + 1}/{max_retries}) ===")
+                    print(f"Error: {str(e)}")
                     if attempt < max_retries - 1:
                         wait_time = (2 ** attempt) * 2  # Exponential backoff
                         print(f"Waiting {wait_time} seconds before retry...")
@@ -604,13 +611,15 @@ def fetch_album_covers(history, graphs_dir):
         if os.path.exists(track_cache_path):
             with open(track_cache_path, 'r') as f:
                 track_to_album = json.load(f)
+            print(f"\n=== Cache Status ===")
             print(f"Loaded {len(track_to_album)} track-to-album mappings from cache")
         else:
             track_to_album = {}
+            print("\n=== Cache Status ===")
             print("No track-to-album cache found, creating new cache")
 
         # Get all unique tracks
-        print("\nFetching album information for unique tracks...")
+        print("\n=== Track Processing ===")
         unique_tracks = history[['track_name', 'artist', 'track_id']].drop_duplicates()
         total_tracks = len(unique_tracks)
         print(f"Found {total_tracks} unique tracks")
@@ -623,8 +632,6 @@ def fetch_album_covers(history, graphs_dir):
             track_id = row['track_id']
             if track_id and track_id not in track_to_album:
                 new_tracks_to_process.append(row)
-            elif track_id:
-                print(f"Using cached album ID for track {track_id}")
 
         # Process new tracks in batches
         if new_tracks_to_process:
@@ -636,7 +643,7 @@ def fetch_album_covers(history, graphs_dir):
             with tqdm(total=len(new_tracks_to_process), 
                      desc="Processing tracks",
                      unit="tracks",
-                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, '
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}, {elapsed}/{remaining}, '
                               'Speed: {rate_fmt}{postfix}]') as pbar:
                 
                 for i in range(0, len(new_tracks_to_process), batch_size):
@@ -661,7 +668,6 @@ def fetch_album_covers(history, graphs_dir):
                                     album_id = track['album']['id']
                                     track_to_album[track_id] = album_id
                                     batch_updates += 1
-                                    print(f"Successfully got album ID for track {track_id}")
                                 else:
                                     print(f"No album data for track {track.get('id', 'unknown')}")
                             
@@ -669,11 +675,13 @@ def fetch_album_covers(history, graphs_dir):
                             if batch_updates > 0:
                                 save_track_cache()
                         else:
-                            print(f"Failed to fetch batch of tracks")
+                            print("\n=== Batch Error ===")
+                            print("Failed to fetch batch of tracks")
                             if r:
                                 print(f"Status code: {r.status_code}")
                                 print(f"Response: {r.text}")
                     except Exception as e:
+                        print("\n=== Batch Error ===")
                         print(f"Error processing batch: {str(e)}")
                         import traceback
                         traceback.print_exc()
@@ -685,7 +693,8 @@ def fetch_album_covers(history, graphs_dir):
 
         # Get unique album IDs
         unique_albums = list(set(track_to_album.values()))
-        print(f"\nFound {len(unique_albums)} unique albums out of {total_tracks} tracks")
+        print(f"\n=== Album Processing ===")
+        print(f"Found {len(unique_albums)} unique albums out of {total_tracks} tracks")
         
         if not unique_albums:
             print("No album IDs found. Check if track IDs are valid and API credentials are correct.")
@@ -695,20 +704,19 @@ def fetch_album_covers(history, graphs_dir):
         album_covers = {}  # Dictionary to store album_id -> image mapping
         missing_albums = []  # List of album IDs we need to fetch
         
-        print("\nChecking album cover cache...")
+        print("\n=== Cache Check ===")
         for album_id in unique_albums:
             cache_path = os.path.join(cache_dir, f"{album_id}.jpg")
             if os.path.exists(cache_path):
                 try:
                     album_covers[album_id] = Image.open(cache_path)
-                    print(f"Using cached album cover for {album_id}")
                 except Exception as e:
                     print(f"Error loading cached image for {album_id}: {e}")
                     missing_albums.append(album_id)
             else:
                 missing_albums.append(album_id)
         
-        print(f"\nFound {len(album_covers)} album covers in cache")
+        print(f"Found {len(album_covers)} album covers in cache")
         print(f"Need to fetch {len(missing_albums)} album covers from API")
 
         # Only proceed with API calls if we have missing covers
@@ -721,7 +729,7 @@ def fetch_album_covers(history, graphs_dir):
             with tqdm(total=len(missing_albums),
                      desc="Fetching missing album covers",
                      unit="albums",
-                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, '
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}, {elapsed}/{remaining}, '
                               'Speed: {rate_fmt}{postfix}]') as pbar:
                 
                 for i in range(0, len(missing_albums), batch_size):
@@ -748,19 +756,19 @@ def fetch_album_covers(history, graphs_dir):
                                             # Save to cache
                                             with open(cache_path, 'wb') as f:
                                                 f.write(img_response.content)
-                                            print(f"Cached album cover for {album_id}")
                                             album_covers[album_id] = Image.open(cache_path)
                                         else:
                                             print(f"Error downloading album cover for {album_id}")
                                             album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
                                     except Exception as e:
-                                        print(f"\nError loading image for album {album['id']}: {e}")
+                                        print(f"Error loading image for album {album['id']}: {e}")
                                         album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
                                 else:
-                                    print(f"\nNo images found for album {album['id'] if album else 'unknown'}")
+                                    print(f"No images found for album {album['id'] if album else 'unknown'}")
                                     album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
                         else:
-                            print(f"\nFailed to fetch batch of albums")
+                            print("\n=== Batch Error ===")
+                            print("Failed to fetch batch of albums")
                             if r:
                                 print(f"Status code: {r.status_code}")
                                 print(f"Response: {r.text}")
@@ -768,7 +776,8 @@ def fetch_album_covers(history, graphs_dir):
                             for album_id in batch:
                                 album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
                     except Exception as e:
-                        print(f"\nError processing batch: {str(e)}")
+                        print("\n=== Batch Error ===")
+                        print(f"Error processing batch: {str(e)}")
                         # Add gray placeholders for failed batch
                         for album_id in batch:
                             album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
@@ -778,7 +787,7 @@ def fetch_album_covers(history, graphs_dir):
                     # Update progress bar
                     pbar.update(len(batch))
         
-        print("\nCreating album cover grid...")
+        print("\n=== Creating Grid ===")
         
         # Create the grid using album covers
         if album_covers:
@@ -787,20 +796,46 @@ def fetch_album_covers(history, graphs_dir):
             cols = int(math.ceil(math.sqrt(n_albums * 1.5)))  # Use 1.5 ratio for better visual layout
             rows = int(math.ceil(n_albums / cols))
             
+            # Define cell size
+            cell_size = 100
+            
             # Create the grid image
-            grid_img = Image.new('RGB', (100*cols, 100*rows), color='white')
+            grid_img = Image.new('RGB', (cell_size*cols, cell_size*rows), color='white')
+            
+            # Process each album cover
             for idx, (album_id, img) in enumerate(album_covers.items()):
-                x = (idx % cols) * 100
-                y = (idx // cols) * 100
-                grid_img.paste(img, (x, y))
+                # Calculate position in grid
+                x = (idx % cols) * cell_size
+                y = (idx // cols) * cell_size
+                
+                # Resize image to fit cell while maintaining aspect ratio
+                img_ratio = img.size[0] / img.size[1]
+                if img_ratio > 1:  # Wider than tall
+                    new_width = cell_size
+                    new_height = int(cell_size / img_ratio)
+                else:  # Taller than wide
+                    new_height = cell_size
+                    new_width = int(cell_size * img_ratio)
+                
+                # Resize image
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                # Calculate position to center the image in the cell
+                paste_x = x + (cell_size - new_width) // 2
+                paste_y = y + (cell_size - new_height) // 2
+                
+                # Paste the resized image
+                grid_img.paste(resized_img, (paste_x, paste_y))
             
             # Save the grid
-            grid_img.save(os.path.join(graphs_dir, 'all_album_covers.png'))
-            print(f"Saved album cover grid with {n_albums} unique albums to {os.path.join(graphs_dir, 'all_album_covers.png')}")
+            output_path = os.path.join(graphs_dir, 'all_album_covers.png')
+            grid_img.save(output_path)
+            print(f"Saved album cover grid with {n_albums} unique albums to {output_path}")
         else:
             print("No album covers were successfully fetched")
 
     except Exception as e:
+        print("\n=== Error ===")
         print(f"Error in album cover fetching: {str(e)}")
         import traceback
         traceback.print_exc()
@@ -823,7 +858,7 @@ def update_readme_with_visualizations(graphs_dir):
     
     # Add each visualization with a description
     viz_descriptions = {
-        'monthly_artist_grid.png': 'Top 5 Artists by Month (with Artist Images)',
+        'monthly_artist_grid.png': 'Top 5 Artists by Month',
         'top_artists.png': 'Top 10 Artists by Listening Time',
         'artist_diversity.png': 'Top 10 Artists by Number of Plays',
         'top_artists_over_time.png': 'Top 5 Artists\' Listening Time Over Months',
