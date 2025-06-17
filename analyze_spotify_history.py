@@ -12,6 +12,9 @@ from matplotlib.ticker import MaxNLocator
 import math
 import argparse
 import time
+import json
+from tqdm import tqdm
+from datetime import timedelta
 
 def create_monthly_top_artists(history, graphs_dir):
     """Create a visualization showing top 5 artists for each month."""
@@ -497,6 +500,12 @@ def fetch_album_covers(history, graphs_dir):
             print(f"Token expires in: {token_data.get('expires_in', 'unknown')} seconds")
             return token_data["access_token"]
 
+        def save_track_cache():
+            """Save the current state of the track-to-album cache."""
+            with open(track_cache_path, 'w') as f:
+                json.dump(track_to_album, f, indent=2)
+            print(f"Updated cache with {len(track_to_album)} track-to-album mappings")
+
         access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
         if not access_token:
             print("Failed to get access token")
@@ -535,12 +544,26 @@ def fetch_album_covers(history, graphs_dir):
 
         def make_request(url, max_retries=5):
             """Make a request with exponential backoff retry logic and rate limiting."""
+            nonlocal access_token, headers  # Allow access to modify these variables
+            
             for attempt in range(max_retries):
                 try:
+                    # Only apply rate limiting for actual API calls
                     rate_limiter.wait_if_needed()
                     response = requests.get(url, headers=headers)
                     
-                    if response.status_code == 429:  # Rate limit hit
+                    if response.status_code == 401:  # Token expired
+                        print("\nAccess token expired. Refreshing token...")
+                        new_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+                        if new_token:
+                            access_token = new_token
+                            headers = {"Authorization": f"Bearer {access_token}"}
+                            print("Token refreshed successfully. Retrying request...")
+                            continue
+                        else:
+                            print("Failed to refresh token")
+                            return None
+                    elif response.status_code == 429:  # Rate limit hit
                         retry_after = int(response.headers.get('Retry-After', 30))
                         retry_after = min(retry_after, 60)  # Cap at 60 seconds
                         print(f"\nRate limit hit. Response body: {response.text}")
@@ -572,59 +595,93 @@ def fetch_album_covers(history, graphs_dir):
         # Initialize rate limiter with more conservative limits
         rate_limiter = RateLimiter(max_requests=8, window_seconds=60)
 
-        # Create cache directory for album covers
+        # Create cache directories
         cache_dir = os.path.join(graphs_dir, 'image_cache/albums')
         os.makedirs(cache_dir, exist_ok=True)
+        
+        # Load or create track-to-album cache
+        track_cache_path = os.path.join(graphs_dir, 'image_cache/track_to_album_cache.json')
+        if os.path.exists(track_cache_path):
+            with open(track_cache_path, 'r') as f:
+                track_to_album = json.load(f)
+            print(f"Loaded {len(track_to_album)} track-to-album mappings from cache")
+        else:
+            track_to_album = {}
+            print("No track-to-album cache found, creating new cache")
 
-        # Get all unique tracks and their album IDs
+        # Get all unique tracks
         print("\nFetching album information for unique tracks...")
         unique_tracks = history[['track_name', 'artist', 'track_id']].drop_duplicates()
         total_tracks = len(unique_tracks)
         print(f"Found {total_tracks} unique tracks")
         
         album_covers = {}  # Dictionary to store album_id -> image mapping
-        track_to_album = {}  # Dictionary to store track_id -> album_id mapping
+        new_tracks_to_process = []
 
-        # Process tracks in smaller batches of 20
-        batch_size = 20
-        for i in range(0, len(unique_tracks), batch_size):
-            batch = unique_tracks.iloc[i:i+batch_size]
-            track_ids = batch['track_id'].dropna().tolist()
+        # Check which tracks we need to process
+        for _, row in unique_tracks.iterrows():
+            track_id = row['track_id']
+            if track_id and track_id not in track_to_album:
+                new_tracks_to_process.append(row)
+            elif track_id:
+                print(f"Using cached album ID for track {track_id}")
+
+        # Process new tracks in batches
+        if new_tracks_to_process:
+            print(f"\nProcessing {len(new_tracks_to_process)} new tracks")
+            batch_size = 20
+            total_batches = (len(new_tracks_to_process) + batch_size - 1) // batch_size
             
-            if not track_ids:
-                continue
+            # Create progress bar for track processing with custom formatting
+            with tqdm(total=len(new_tracks_to_process), 
+                     desc="Processing tracks",
+                     unit="tracks",
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, '
+                              'Speed: {rate_fmt}{postfix}]') as pbar:
                 
-            progress = (i + len(batch)) / total_tracks * 100
-            print(f"\nProcessing tracks: {progress:.1f}% complete")
-            print(f"Batch {i//batch_size + 1}/{(total_tracks + batch_size - 1)//batch_size}")
-            
-            # Create comma-separated string of track IDs
-            track_ids_str = ','.join(track_ids)
-            url = f"https://api.spotify.com/v1/tracks?ids={track_ids_str}"
-            
-            try:
-                r = make_request(url)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    for track in data.get('tracks', []):
-                        if track and 'album' in track and 'id' in track['album']:
-                            track_id = track['id']
-                            album_id = track['album']['id']
-                            track_to_album[track_id] = album_id
-                            print(f"Successfully got album ID for track {track_id}")
+                for i in range(0, len(new_tracks_to_process), batch_size):
+                    batch = new_tracks_to_process[i:i+batch_size]
+                    track_ids = [row['track_id'] for row in batch if row['track_id']]
+                    
+                    if not track_ids:
+                        continue
+                    
+                    # Create comma-separated string of track IDs
+                    track_ids_str = ','.join(track_ids)
+                    url = f"https://api.spotify.com/v1/tracks?ids={track_ids_str}"
+                    
+                    try:
+                        r = make_request(url)
+                        if r and r.status_code == 200:
+                            data = r.json()
+                            batch_updates = 0
+                            for track in data.get('tracks', []):
+                                if track and 'album' in track and 'id' in track['album']:
+                                    track_id = track['id']
+                                    album_id = track['album']['id']
+                                    track_to_album[track_id] = album_id
+                                    batch_updates += 1
+                                    print(f"Successfully got album ID for track {track_id}")
+                                else:
+                                    print(f"No album data for track {track.get('id', 'unknown')}")
+                            
+                            # Save cache after each successful batch
+                            if batch_updates > 0:
+                                save_track_cache()
                         else:
-                            print(f"No album data for track {track.get('id', 'unknown')}")
-                else:
-                    print(f"Failed to fetch batch of tracks")
-                    if r:
-                        print(f"Status code: {r.status_code}")
-                        print(f"Response: {r.text}")
-            except Exception as e:
-                print(f"Error processing batch: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                # Add a longer wait after an error
-                time.sleep(10)
+                            print(f"Failed to fetch batch of tracks")
+                            if r:
+                                print(f"Status code: {r.status_code}")
+                                print(f"Response: {r.text}")
+                    except Exception as e:
+                        print(f"Error processing batch: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                        # Add a longer wait after an error
+                        time.sleep(10)
+                    
+                    # Update progress bar
+                    pbar.update(len(batch))
 
         # Get unique album IDs
         unique_albums = list(set(track_to_album.values()))
@@ -634,65 +691,92 @@ def fetch_album_covers(history, graphs_dir):
             print("No album IDs found. Check if track IDs are valid and API credentials are correct.")
             return
 
-        # Second pass: Fetch album covers in smaller batches of 10
-        batch_size = 10
-        for i in range(0, len(unique_albums), batch_size):
-            batch = unique_albums[i:i+batch_size]
-            progress = (i + len(batch)) / len(unique_albums) * 100
-            print(f"\nFetching album covers: {progress:.1f}% complete")
-            print(f"Batch {i//batch_size + 1}/{(len(unique_albums) + batch_size - 1)//batch_size}")
+        # First, check which album covers we already have in cache
+        album_covers = {}  # Dictionary to store album_id -> image mapping
+        missing_albums = []  # List of album IDs we need to fetch
+        
+        print("\nChecking album cover cache...")
+        for album_id in unique_albums:
+            cache_path = os.path.join(cache_dir, f"{album_id}.jpg")
+            if os.path.exists(cache_path):
+                try:
+                    album_covers[album_id] = Image.open(cache_path)
+                    print(f"Using cached album cover for {album_id}")
+                except Exception as e:
+                    print(f"Error loading cached image for {album_id}: {e}")
+                    missing_albums.append(album_id)
+            else:
+                missing_albums.append(album_id)
+        
+        print(f"\nFound {len(album_covers)} album covers in cache")
+        print(f"Need to fetch {len(missing_albums)} album covers from API")
+
+        # Only proceed with API calls if we have missing covers
+        if missing_albums:
+            # Second pass: Fetch missing album covers in batches
+            batch_size = 20
+            total_batches = (len(missing_albums) + batch_size - 1) // batch_size
             
-            # Create comma-separated string of album IDs
-            album_ids = ','.join(batch)
-            url = f"https://api.spotify.com/v1/albums?ids={album_ids}"
-            
-            try:
-                r = make_request(url)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    for album in data['albums']:
-                        if album and album['images']:
-                            try:
-                                album_id = album['id']
-                                cache_path = os.path.join(cache_dir, f"{album_id}.jpg")
-                                
-                                # Check if image exists in cache
-                                if os.path.exists(cache_path):
-                                    print(f"Using cached album cover for {album_id}")
-                                    album_covers[album_id] = Image.open(cache_path)
+            # Create progress bar for album processing with custom formatting
+            with tqdm(total=len(missing_albums),
+                     desc="Fetching missing album covers",
+                     unit="albums",
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, '
+                              'Speed: {rate_fmt}{postfix}]') as pbar:
+                
+                for i in range(0, len(missing_albums), batch_size):
+                    batch = missing_albums[i:i+batch_size]
+                    
+                    # Create comma-separated string of album IDs
+                    album_ids = ','.join(batch)
+                    url = f"https://api.spotify.com/v1/albums?ids={album_ids}"
+                    
+                    try:
+                        r = make_request(url)
+                        if r and r.status_code == 200:
+                            data = r.json()
+                            for album in data['albums']:
+                                if album and album['images']:
+                                    try:
+                                        album_id = album['id']
+                                        cache_path = os.path.join(cache_dir, f"{album_id}.jpg")
+                                        
+                                        # Download and cache the image
+                                        img_url = album['images'][0]['url']
+                                        img_response = requests.get(img_url)
+                                        if img_response.status_code == 200:
+                                            # Save to cache
+                                            with open(cache_path, 'wb') as f:
+                                                f.write(img_response.content)
+                                            print(f"Cached album cover for {album_id}")
+                                            album_covers[album_id] = Image.open(cache_path)
+                                        else:
+                                            print(f"Error downloading album cover for {album_id}")
+                                            album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
+                                    except Exception as e:
+                                        print(f"\nError loading image for album {album['id']}: {e}")
+                                        album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
                                 else:
-                                    img_url = album['images'][0]['url']
-                                    img_response = requests.get(img_url)
-                                    if img_response.status_code == 200:
-                                        # Save to cache
-                                        with open(cache_path, 'wb') as f:
-                                            f.write(img_response.content)
-                                        print(f"Cached album cover for {album_id}")
-                                        album_covers[album_id] = Image.open(cache_path)
-                                    else:
-                                        print(f"Error downloading album cover for {album_id}")
-                                        album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
-                            except Exception as e:
-                                print(f"\nError loading image for album {album['id']}: {e}")
-                                album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
+                                    print(f"\nNo images found for album {album['id'] if album else 'unknown'}")
+                                    album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
                         else:
-                            print(f"\nNo images found for album {album['id'] if album else 'unknown'}")
-                            album_covers[album['id']] = Image.new('RGB', (100, 100), color='gray')
-                else:
-                    print(f"\nFailed to fetch batch of albums")
-                    if r:
-                        print(f"Status code: {r.status_code}")
-                        print(f"Response: {r.text}")
-                    # Add gray placeholders for failed batch
-                    for album_id in batch:
-                        album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
-            except Exception as e:
-                print(f"\nError processing batch: {str(e)}")
-                # Add gray placeholders for failed batch
-                for album_id in batch:
-                    album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
-                # Add a longer wait after an error
-                time.sleep(10)
+                            print(f"\nFailed to fetch batch of albums")
+                            if r:
+                                print(f"Status code: {r.status_code}")
+                                print(f"Response: {r.text}")
+                            # Add gray placeholders for failed batch
+                            for album_id in batch:
+                                album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
+                    except Exception as e:
+                        print(f"\nError processing batch: {str(e)}")
+                        # Add gray placeholders for failed batch
+                        for album_id in batch:
+                            album_covers[album_id] = Image.new('RGB', (100, 100), color='gray')
+                        # Add a longer wait after an error
+                        time.sleep(10)
+                    
+                    # Update progress bar
+                    pbar.update(len(batch))
         
         print("\nCreating album cover grid...")
         

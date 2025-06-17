@@ -4,21 +4,30 @@ Keeping track of all of my spotify listening history so that I can analyze the d
 
 Script run every hour with github actions to ensure no data is lost.
 
+## Overview
+
+This repository contains my personal Spotify listening history data and analysis. The data is collected hourly using GitHub Actions to ensure comprehensive tracking. The visualizations below provide insights into my listening habits, artist preferences, and music discovery patterns.
+
+## Data Collection
+
+- Data is collected every hour via GitHub Actions
+- Each data point includes:
+  - Timestamp
+  - Track ID
+  - Track Name  
+  - Artist
+  - Play Duration
 
 ## Visualizations
 
+The visualizations are grouped into three main categories:
+
+1. Artist Analysis - Shows artist preferences and listening patterns
+2. Track Analysis - Reveals most played songs and track diversity
+3. General Listening Patterns - Displays when and how much I listen
 
 
-
-
-
-
-
-
-
-
-
-### Latest Analysis (Last Updated: 2025-06-13 17:57:22)
+### Latest Analysis (Last Updated: 2025-06-17 03:02:17)
 
 #### Top 5 Artists by Month (with Artist Images)
 
@@ -75,4 +84,8 @@ Script run every hour with github actions to ensure no data is lost.
 #### Monthly and Weekly Listening Time
 
 ![Monthly and Weekly Listening Time](graphs/listening_by_month.png)
+
+#### Album Cover Grid
+
+![Album Cover Grid](graphs/all_album_covers.png)
 
