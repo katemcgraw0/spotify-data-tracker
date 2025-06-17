@@ -28,11 +28,21 @@ The visualizations are grouped into three main categories:
 
 
 
-### Latest Analysis (Last Updated: 2025-06-17 03:23:49)
 
-#### Top 5 Artists by Month (with Artist Images)
 
-![Top 5 Artists by Month (with Artist Images)](graphs/monthly_artist_grid.png)
+
+
+
+
+### Latest Analysis (Last Updated: 2025-06-17 17:22:50)
+
+#### Top 5 Artists by Month
+
+![Top 5 Artists by Month](graphs/monthly_artist_grid.png)
+
+#### Top 5 Tracks by Month
+
+![Top 5 Tracks by Month](graphs/monthly_track_grid.png)
 
 #### Top 10 Artists by Listening Time
 

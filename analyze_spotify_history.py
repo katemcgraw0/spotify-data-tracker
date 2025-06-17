@@ -51,8 +51,100 @@ def create_monthly_top_artists(history, graphs_dir):
     plt.tight_layout()
     
     # Save the plot
-    plt.savefig(os.path.join(graphs_dir, 'monthly_top_artists.png'))
+    plt.savefig(os.path.join(graphs_dir, 'monthly_artist_grid.png'))
     plt.close()
+
+def create_monthly_top_tracks_grid(history, graphs_dir):
+    """Create a grid of track album covers organized by month."""
+    try:
+        # Get top 5 tracks for each month
+        monthly_top_tracks = history.groupby(['month', 'track_name', 'artist', 'track_id'])['minutes_played'].sum().reset_index()
+        monthly_top_tracks = monthly_top_tracks.sort_values(['month', 'minutes_played'], ascending=[True, False])
+        monthly_top_tracks = monthly_top_tracks.groupby('month').head(5)
+        
+        # Load track-to-album cache
+        track_cache_path = os.path.join(graphs_dir, 'image_cache/track_to_album_cache.json')
+        if not os.path.exists(track_cache_path):
+            print("Track-to-album cache not found")
+            return
+            
+        with open(track_cache_path, 'r') as f:
+            track_to_album = json.load(f)
+        
+        # Create the grid
+        print(f"Creating grid of track album covers...")
+        months = sorted(monthly_top_tracks['month'].unique())
+        # Make the figure smaller and adjust the spacing
+        fig, axes = plt.subplots(len(months), 5, figsize=(10, 2*len(months)))
+        fig.subplots_adjust(wspace=0, hspace=0)  # Remove spacing between subplots
+        
+        for i, month in enumerate(months):
+            month_tracks = monthly_top_tracks[monthly_top_tracks['month'] == month]
+            
+            for j, (_, row) in enumerate(month_tracks.iterrows()):
+                ax = axes[i, j]
+                track_id = row['track_id']
+                
+                if track_id in track_to_album:
+                    album_id = track_to_album[track_id]
+                    cache_path = os.path.join(graphs_dir, 'image_cache/albums', f"{album_id}.jpg")
+                    
+                    if os.path.exists(cache_path):
+                        try:
+                            # Load image from cache
+                            img = Image.open(cache_path)
+                            ax.imshow(img)
+                            
+                            # Add ranking number in top-left corner
+                            ax.text(0.05, 0.95, f"#{j+1}", 
+                                   ha='left', va='top', 
+                                   transform=ax.transAxes,
+                                   color='white',
+                                   fontsize=10,
+                                   fontweight='bold',
+                                   bbox=dict(facecolor='black', alpha=0.7, edgecolor='none', pad=2))
+                            
+                            # Add track name and artist at bottom
+                            track_info = f"{row['track_name']}\n({row['artist']})"
+                            ax.text(0.5, 0.05, track_info, 
+                                   ha='center', va='bottom', 
+                                   transform=ax.transAxes,
+                                   color='white',
+                                   fontsize=8,
+                                   bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=2))
+                        except Exception as e:
+                            print(f"Error loading image for track {row['track_name']}: {e}")
+                            ax.text(0.5, 0.5, f"{row['track_name']}\n({row['artist']})", 
+                                   ha='center', va='center', wrap=True)
+                    else:
+                        ax.text(0.5, 0.5, f"{row['track_name']}\n({row['artist']})", 
+                               ha='center', va='center', wrap=True)
+                else:
+                    ax.text(0.5, 0.5, f"{row['track_name']}\n({row['artist']})", 
+                           ha='center', va='center', wrap=True)
+                
+                ax.axis('off')
+                if j == 0:  # Add month label only for first column
+                    # Create a background for the month label
+                    ax.text(-0.1, 0.5, month.strftime('%B %Y'), 
+                           ha='right', va='center', 
+                           transform=ax.transAxes,
+                           color='white',
+                           fontsize=10,
+                           fontweight='bold',
+                           bbox=dict(facecolor='black', alpha=0.7, edgecolor='none', pad=5))
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(graphs_dir, 'monthly_track_grid.png'), 
+                   bbox_inches='tight', 
+                   dpi=300,
+                   pad_inches=0)
+        plt.close()
+        
+    except Exception as e:
+        print(f"Error in monthly track grid creation: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 def create_monthly_artist_grid(history, graphs_dir):
     """Create a grid of artist images organized by month."""
@@ -256,6 +348,8 @@ def create_visualizations(history, graphs_dir):
 
     # Create monthly artist grid visualization
     create_monthly_artist_grid(history, graphs_dir)
+
+    create_monthly_top_tracks_grid(history, graphs_dir)
 
     # ARTISTS 
     # --- Visualization 1: Top Artists ---
@@ -467,6 +561,7 @@ def create_visualizations(history, graphs_dir):
         'listening_heatmap.png',
         'listening_by_month.png',
         'monthly_artist_grid.png',
+        'monthly_track_grid.png',
     ]
     
     all_images = [Image.open(os.path.join(graphs_dir, img)).convert('RGB') 
@@ -859,6 +954,7 @@ def update_readme_with_visualizations(graphs_dir):
     # Add each visualization with a description
     viz_descriptions = {
         'monthly_artist_grid.png': 'Top 5 Artists by Month',
+        'monthly_track_grid.png': 'Top 5 Tracks by Month',
         'top_artists.png': 'Top 10 Artists by Listening Time',
         'artist_diversity.png': 'Top 10 Artists by Number of Plays',
         'top_artists_over_time.png': 'Top 5 Artists\' Listening Time Over Months',
