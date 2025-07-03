@@ -1,4 +1,4 @@
-name: Spotify Data Tracker
+name: Spotify Data Analysis
 
 on:
   schedule:
