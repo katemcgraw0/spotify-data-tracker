@@ -47,7 +47,8 @@ The visualizations are grouped into three main categories:
 
 
 
-### Latest Analysis (Last Updated: 2025-07-28 15:57:01)
+
+### Latest Analysis (Last Updated: 2025-08-03 02:37:42)
 
 #### Top 5 Artists by Month
 
@@ -108,8 +109,4 @@ The visualizations are grouped into three main categories:
 #### Monthly and Weekly Listening Time
 
 ![Monthly and Weekly Listening Time](graphs/listening_by_month.png)
-
-#### Album Cover Grid
-
-![Album Cover Grid](graphs/all_album_covers.png)
 
